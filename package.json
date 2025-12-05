@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "android": "npx cap add android && npx cap sync && npx cap open android"
+    "android": "npx cap add android && npx cap sync && npx cap open android",
+    "build:apk": "npm run build && npx cap sync && cd android && chmod +x gradlew && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
