@@ -5,7 +5,14 @@ const STORAGE_KEY = 'simple_bookkeeping_data_v1';
 export const getExpenses = (): Expense[] => {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    
+    const parsed = JSON.parse(data);
+    // Migration: Add 'type' = 'expense' to old records that don't have it
+    return parsed.map((item: any) => ({
+      ...item,
+      type: item.type || 'expense'
+    }));
   } catch (e) {
     console.error("Failed to load expenses", e);
     return [];
