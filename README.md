@@ -9,6 +9,8 @@
 无需网络
 无需权限
 三无产品
+目前只支持安卓 
+apk下载：https://github.com/bulengfeng/Simple-Bookkeeping/releases
 
 
 ## Run Locally
