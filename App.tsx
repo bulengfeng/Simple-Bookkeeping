@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, List, PieChart, Trash2, Calendar, ChevronRight, ChevronLeft, Check, Download, Upload } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { Expense, CategoryType, TransactionType } from './types';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryConfig } from './constants';
 import * as storage from './services/storageService';
@@ -98,16 +101,43 @@ export default function App() {
   };
 
   // Export Data
-  const handleExport = () => {
+  const handleExport = async () => {
+    const fileName = `simple-bookkeeping-backup-${getTodayStr()}.json`;
     const dataStr = JSON.stringify(expenses, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `simple-bookkeeping-backup-${getTodayStr()}.json`;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    if (Capacitor.isNativePlatform()) {
+      // Native App Logic (Android/iOS)
+      try {
+        // 1. Write file to cache directory
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: dataStr,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+
+        // 2. Share the file
+        await Share.share({
+          title: '备份数据',
+          text: '这是我的极简记账备份数据',
+          url: result.uri,
+          dialogTitle: '导出备份文件',
+        });
+      } catch (e) {
+        console.error('Export failed', e);
+        alert('导出失败: ' + (e as any).message);
+      }
+    } else {
+      // Web Logic
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Import Data
