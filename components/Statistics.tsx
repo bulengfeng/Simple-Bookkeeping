@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
 import { Expense } from '../types';
@@ -22,6 +22,9 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
   const [range, setRange] = useState<TimeRange>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
+  
+  // Ref for the scrolling chart container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const navigateDate = (direction: -1 | 1) => {
     const newDate = new Date(currentDate);
@@ -33,7 +36,7 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
   };
 
   // 1. Filter expenses by Date Range only
-  const { dateFilteredExpenses, label } = useMemo(() => {
+  const { dateFilteredExpenses, label, rangeStart, rangeEnd } = useMemo(() => {
     const target = new Date(currentDate);
     let start: Date, end: Date;
     let labelText = '';
@@ -78,11 +81,11 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
       e.date >= start.getTime() && 
       e.date <= end.getTime()
     );
-    return { dateFilteredExpenses: filtered, label: labelText };
+    return { dateFilteredExpenses: filtered, label: labelText, rangeStart: start, rangeEnd: end };
   }, [expenses, range, currentDate]);
 
-  // 2. Aggregate Data based on View Mode
-  const { totalIncome, totalExpense, balance, chartData } = useMemo(() => {
+  // 2. Aggregate Data based on View Mode (Totals & Pie Data)
+  const { totalIncome, totalExpense, balance, pieChartData } = useMemo(() => {
     let inc = 0;
     let exp = 0;
     const categoryMap = new Map<string, number>();
@@ -101,14 +104,7 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
 
     let data: any[] = [];
     
-    if (viewMode === 'overview') {
-      // Bar Chart Data
-      data = [
-        { name: '总收入', value: inc, type: 'income' },
-        { name: '总支出', value: exp, type: 'expense' }
-      ];
-    } else {
-      // Pie Chart Data
+    if (viewMode !== 'overview') {
       data = Array.from(categoryMap.entries()).map(([key, value]) => {
         const config = getCategoryConfig(key);
         return {
@@ -119,8 +115,98 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
       }).sort((a, b) => b.value - a.value);
     }
 
-    return { totalIncome: inc, totalExpense: exp, balance: inc - exp, chartData: data };
+    return { totalIncome: inc, totalExpense: exp, balance: inc - exp, pieChartData: data };
   }, [dateFilteredExpenses, viewMode]);
+
+  // 3. Aggregate Trend Data for Bar Chart
+  const trendData = useMemo(() => {
+    const data: { name: string; income: number; expense: number; sortIndex: number }[] = [];
+    
+    if (range === 'day') {
+      // Day: Just show Total Income vs Total Expense for today
+      data.push({
+        name: '今日',
+        income: totalIncome,
+        expense: totalExpense,
+        sortIndex: 0
+      });
+    } else if (range === 'week') {
+      // Week: 7 Days
+      const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      for(let i=0; i<7; i++) {
+         data.push({
+           name: weekDays[i],
+           income: 0,
+           expense: 0,
+           sortIndex: i
+         });
+      }
+      
+      dateFilteredExpenses.forEach(e => {
+        const d = new Date(e.date);
+        let dayIndex = d.getDay() - 1;
+        if (dayIndex === -1) dayIndex = 6;
+        
+        if (e.type === 'income') data[dayIndex].income += e.amount;
+        else data[dayIndex].expense += e.amount;
+      });
+
+    } else if (range === 'month') {
+      // Month: Show every day of the month
+      const year = rangeStart.getFullYear();
+      const month = rangeStart.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      // Determine the limit day: if it's current month, stop at today
+      const now = new Date();
+      let limitDay = daysInMonth;
+      if (year === now.getFullYear() && month === now.getMonth()) {
+        limitDay = now.getDate();
+      }
+
+      for(let i=1; i<=limitDay; i++) {
+        data.push({ name: `${month + 1}/${i}`, income: 0, expense: 0, sortIndex: i });
+      }
+
+      dateFilteredExpenses.forEach(e => {
+        const d = new Date(e.date);
+        const day = d.getDate();
+        // Only add if day is within our limit (handle case where future expenses exist in DB but we are limiting chart)
+        if (day <= limitDay) {
+            // data index is day - 1
+            if (e.type === 'income') data[day - 1].income += e.amount;
+            else data[day - 1].expense += e.amount;
+        }
+      });
+
+    } else if (range === 'year') {
+      // Year: 12 Months
+      for(let i=1; i<=12; i++) {
+        data.push({ name: `${i}月`, income: 0, expense: 0, sortIndex: i });
+      }
+
+      dateFilteredExpenses.forEach(e => {
+        const d = new Date(e.date);
+        const monthIndex = d.getMonth(); // 0-11
+        if (e.type === 'income') data[monthIndex].income += e.amount;
+        else data[monthIndex].expense += e.amount;
+      });
+    }
+
+    return data;
+  }, [dateFilteredExpenses, range, rangeStart, totalIncome, totalExpense]);
+
+  // Auto-scroll to the end (today) when data updates, especially for 'month' view
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+        // Use a small timeout to ensure rendering is complete
+        setTimeout(() => {
+            if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+            }
+        }, 0);
+    }
+  }, [trendData, range]);
 
   const currentTotal = viewMode === 'income' ? totalIncome : totalExpense;
 
@@ -193,9 +279,10 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
         </div>
       </div>
 
-      {/* Overview Summary Cards */}
+      {/* Overview Mode Content */}
       {viewMode === 'overview' && (
         <>
+            {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-2 mx-1">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                     <p className="text-gray-400 text-xs mb-1">总收入</p>
@@ -216,8 +303,8 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
                 </div>
             </div>
 
-            {/* Data Management Section - ONLY VISIBLE IN OVERVIEW MODE - MOVED HERE */}
-            <div className="mx-1 mt-2">
+            {/* Data Management Section - ONLY IN OVERVIEW */}
+            <div className="mx-1 mt-2 mb-2">
                 <h3 className="text-sm font-bold text-gray-500 mb-2 px-1">数据管理</h3>
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
                     <div className="flex space-x-3">
@@ -248,87 +335,93 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
                     </p>
                 </div>
             </div>
-        </>
-      )}
 
-      {/* Single Type Total Display */}
-      {viewMode !== 'overview' && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center mx-1">
-            <p className="text-gray-500 text-xs mb-1">{viewMode === 'expense' ? '总支出' : '总收入'}</p>
-            <h2 className={`text-3xl font-bold ${viewMode === 'expense' ? 'text-gray-900' : 'text-green-600'}`}>
-                ¥ {currentTotal.toFixed(2)}
-            </h2>
-        </div>
-      )}
-
-      {/* Chart Section */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex-1 mx-1 flex flex-col min-h-[300px]">
-        {chartData.length === 0 || (viewMode !== 'overview' && currentTotal === 0) ? (
-             <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
-                <p className="text-sm">该时段暂无数据</p>
-             </div>
-        ) : (
-            <>
-                {viewMode === 'overview' ? (
-                    // Bar Chart for Overview
-                    <div className="flex-1 w-full mt-4">
+            {/* Income vs Expense Bar Chart */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mx-1 flex flex-col h-64">
+                <h3 className="text-xs font-bold text-gray-400 mb-4">收支对比</h3>
+                <div ref={scrollContainerRef} className="flex-1 overflow-x-auto no-scrollbar pb-2">
+                    <div style={{ minWidth: range === 'month' ? `${trendData.length * 40}px` : '100%', height: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
-                                <YAxis hide />
-                                <RechartsTooltip 
-                                    cursor={{ fill: 'transparent' }}
-                                    formatter={(value: number) => `¥${value.toFixed(2)}`}
-                                    contentStyle={{ 
-                                        borderRadius: '8px', 
-                                        border: 'none', 
-                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
-                                    }}
+                            <BarChart data={trendData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                                    interval={0}
                                 />
-                                <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={40}>
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.type === 'income' ? '#22C55E' : '#374151'} />
-                                    ))}
-                                </Bar>
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                                />
+                                <RechartsTooltip 
+                                    formatter={(value: number) => `¥${value.toFixed(0)}`}
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                    cursor={{ fill: '#F3F4F6' }}
+                                />
+                                <Bar dataKey="income" name="收入" fill="#22C55E" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                                <Bar dataKey="expense" name="支出" fill="#374151" radius={[4, 4, 0, 0]} maxBarSize={30} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
+                </div>
+            </div>
+        </>
+      )}
+
+      {/* Expense/Income Mode Content */}
+      {viewMode !== 'overview' && (
+        <>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center mx-1">
+                <p className="text-gray-500 text-xs mb-1">{viewMode === 'expense' ? '总支出' : '总收入'}</p>
+                <h2 className={`text-3xl font-bold ${viewMode === 'expense' ? 'text-gray-900' : 'text-green-600'}`}>
+                    ¥ {currentTotal.toFixed(2)}
+                </h2>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex-1 mx-1 flex flex-col min-h-[350px]">
+                {/* Conditional Chart Rendering */}
+                {currentTotal === 0 ? (
+                     <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
+                        <p className="text-sm">该时段暂无数据</p>
+                     </div>
                 ) : (
-                    // Pie Chart for Details
                     <>
+                        {/* PIE CHART VIEW */}
                         <div className="w-full h-56">
                             <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                data={chartData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={50}
-                                outerRadius={75}
-                                paddingAngle={4}
-                                dataKey="value"
-                                >
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                                </Pie>
-                                <RechartsTooltip 
-                                formatter={(value: number) => `¥${value.toFixed(2)}`}
-                                contentStyle={{ 
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    borderRadius: '12px', 
-                                    border: 'none', 
-                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                                    padding: '8px 12px'
-                                }}
-                                itemStyle={{ color: '#374151', fontSize: '12px', fontWeight: 600 }}
-                                />
-                            </PieChart>
+                                <PieChart>
+                                    <Pie
+                                        data={pieChartData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={75}
+                                        paddingAngle={4}
+                                        dataKey="value"
+                                    >
+                                        {pieChartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <RechartsTooltip 
+                                        formatter={(value: number) => `¥${value.toFixed(2)}`}
+                                        contentStyle={{ 
+                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                            borderRadius: '12px', 
+                                            border: 'none', 
+                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                                            padding: '8px 12px'
+                                        }}
+                                        itemStyle={{ color: '#374151', fontSize: '12px', fontWeight: 600 }}
+                                    />
+                                </PieChart>
                             </ResponsiveContainer>
                         </div>
                         <div className="mt-2 space-y-3 overflow-y-auto max-h-48 no-scrollbar">
-                            {chartData.map((item, index) => {
+                            {pieChartData.map((item, index) => {
                                 const percentage = currentTotal > 0 ? ((item.value / currentTotal) * 100).toFixed(1) : '0.0';
                                 return (
                                 <div key={item.name} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0">
@@ -346,9 +439,9 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport })
                         </div>
                     </>
                 )}
-            </>
-        )}
-      </div>
+            </div>
+        </>
+      )}
     </div>
   );
 };
