@@ -4,14 +4,9 @@
 
 # Run and deploy your AI Studio app
 
-简易记账工具
-无广告
-无需网络
-无需权限
-三无产品
-目前只支持安卓 
-apk下载：https://github.com/bulengfeng/Simple-Bookkeeping/releases
+This contains everything you need to run your app locally.
 
+View your app in AI Studio: https://ai.studio/apps/drive/1JZyHEtD1uqu1RVkkbODxCut1_i1P6Jlo
 
 ## Run Locally
 

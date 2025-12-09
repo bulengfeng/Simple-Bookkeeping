@@ -3,12 +3,14 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from 'recharts';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
 import { Expense } from '../types';
 import { getCategoryConfig } from '../constants';
 
 interface StatisticsProps {
   expenses: Expense[];
+  onExport: () => void;
+  onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 type TimeRange = 'day' | 'week' | 'month' | 'year';
@@ -16,7 +18,7 @@ type ViewMode = 'expense' | 'income' | 'overview';
 
 const COLORS = ['#F97316', '#3B82F6', '#EC4899', '#EAB308', '#A855F7', '#22C55E', '#6366F1', '#6B7280'];
 
-const Statistics: React.FC<StatisticsProps> = ({ expenses }) => {
+const Statistics: React.FC<StatisticsProps> = ({ expenses, onExport, onImport }) => {
   const [range, setRange] = useState<TimeRange>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
@@ -193,25 +195,60 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses }) => {
 
       {/* Overview Summary Cards */}
       {viewMode === 'overview' && (
-        <div className="grid grid-cols-2 gap-2 mx-1">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <p className="text-gray-400 text-xs mb-1">总收入</p>
-                <p className="text-lg font-bold text-green-600">¥{totalIncome.toFixed(2)}</p>
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <p className="text-gray-400 text-xs mb-1">总支出</p>
-                <p className="text-lg font-bold text-gray-900">¥{totalExpense.toFixed(2)}</p>
-            </div>
-            <div className="bg-indigo-600 p-4 rounded-xl shadow-md col-span-2 text-white flex justify-between items-center">
-                <div>
-                    <p className="text-indigo-200 text-xs mb-1">结余</p>
-                    <p className="text-2xl font-bold">¥{balance.toFixed(2)}</p>
+        <>
+            <div className="grid grid-cols-2 gap-2 mx-1">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <p className="text-gray-400 text-xs mb-1">总收入</p>
+                    <p className="text-lg font-bold text-green-600">¥{totalIncome.toFixed(2)}</p>
                 </div>
-                <div className="text-right">
-                    <p className="text-indigo-200 text-xs">净收益</p>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <p className="text-gray-400 text-xs mb-1">总支出</p>
+                    <p className="text-lg font-bold text-gray-900">¥{totalExpense.toFixed(2)}</p>
+                </div>
+                <div className="bg-indigo-600 p-4 rounded-xl shadow-md col-span-2 text-white flex justify-between items-center">
+                    <div>
+                        <p className="text-indigo-200 text-xs mb-1">结余</p>
+                        <p className="text-2xl font-bold">¥{balance.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-indigo-200 text-xs">净收益</p>
+                    </div>
                 </div>
             </div>
-        </div>
+
+            {/* Data Management Section - ONLY VISIBLE IN OVERVIEW MODE - MOVED HERE */}
+            <div className="mx-1 mt-2">
+                <h3 className="text-sm font-bold text-gray-500 mb-2 px-1">数据管理</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                    <div className="flex space-x-3">
+                        <button 
+                            onClick={onExport}
+                            className="flex-1 flex flex-col items-center justify-center py-4 bg-indigo-50 rounded-xl text-indigo-700 active:scale-95 transition-transform"
+                        >
+                            <Download size={24} className="mb-2" />
+                            <span className="text-xs font-bold">导出数据</span>
+                        </button>
+                        <div className="flex-1 relative">
+                            <input 
+                                type="file" 
+                                accept=".json" 
+                                onChange={onImport}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            <button 
+                                className="w-full h-full flex flex-col items-center justify-center py-4 bg-emerald-50 rounded-xl text-emerald-700 active:scale-95 transition-transform"
+                            >
+                                <Upload size={24} className="mb-2" />
+                                <span className="text-xs font-bold">导入数据</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2 text-center">
+                        支持导入 .json 格式的备份文件，重复记录将被自动跳过
+                    </p>
+                </div>
+            </div>
+        </>
       )}
 
       {/* Single Type Total Display */}
@@ -225,7 +262,7 @@ const Statistics: React.FC<StatisticsProps> = ({ expenses }) => {
       )}
 
       {/* Chart Section */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex-1 mx-1 mb-4 flex flex-col min-h-[300px]">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex-1 mx-1 flex flex-col min-h-[300px]">
         {chartData.length === 0 || (viewMode !== 'overview' && currentTotal === 0) ? (
              <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
                 <p className="text-sm">该时段暂无数据</p>

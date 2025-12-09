@@ -439,40 +439,11 @@ export default function App() {
   const renderStatsTab = () => (
     <div className="h-full overflow-y-auto pb-40 px-4 pt-4 no-scrollbar">
       <h2 className="text-xl font-bold text-gray-900 mb-6">消费统计</h2>
-      <Statistics expenses={expenses} />
-      
-      {/* Data Management Section */}
-      <div className="mt-8 mb-4">
-        <h3 className="text-sm font-bold text-gray-500 mb-3 px-1">数据管理</h3>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-            <div className="flex space-x-3">
-                <button 
-                    onClick={handleExport}
-                    className="flex-1 flex flex-col items-center justify-center py-4 bg-indigo-50 rounded-xl text-indigo-700 active:scale-95 transition-transform"
-                >
-                    <Download size={24} className="mb-2" />
-                    <span className="text-xs font-bold">导出数据</span>
-                </button>
-                <div className="flex-1 relative">
-                    <input 
-                        type="file" 
-                        accept=".json" 
-                        onChange={handleImport}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    <button 
-                        className="w-full h-full flex flex-col items-center justify-center py-4 bg-emerald-50 rounded-xl text-emerald-700 active:scale-95 transition-transform"
-                    >
-                        <Upload size={24} className="mb-2" />
-                        <span className="text-xs font-bold">导入数据</span>
-                    </button>
-                </div>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-3 text-center">
-                支持导入 .json 格式的备份文件，重复记录将被自动跳过
-            </p>
-        </div>
-      </div>
+      <Statistics 
+        expenses={expenses} 
+        onExport={handleExport}
+        onImport={handleImport}
+      />
     </div>
   );
 
